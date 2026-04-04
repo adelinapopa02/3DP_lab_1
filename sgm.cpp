@@ -209,12 +209,47 @@ namespace sgm
       // if the processed pixel is the first or the last in the directional path:
       if( cur_y == pw_.north || cur_y == pw_.south || cur_x == pw_.east || cur_x == pw_.west)
       {
-        //Please fill me!
+        for (int d = 0; d < (int)disparity_range_; d++)
+        {
+          // For the first pixel in a path, the path cost is simply the matching cost
+          path_cost_[cur_path][cur_y][cur_x][d] = cost_[cur_y][cur_x][d];
+        }
       }
 
       else
       {
-        //Please fill me!
+        // Identify the previous pixel coordinates based on the direction increments 
+        int prev_x = cur_x - direction_x;
+        int prev_y = cur_y - direction_y;
+
+        // Find the minimum path cost at the PREVIOUS pixel across all disparities
+        best_prev_cost = path_cost_[cur_path][prev_y][prev_x][0];
+        for (int d = 1; d < (int)disparity_range_; d++)
+        {
+          if (path_cost_[cur_path][prev_y][prev_x][d] < best_prev_cost)
+            best_prev_cost = path_cost_[cur_path][prev_y][prev_x][d];
+        }
+
+        for (int d = 0; d < (int)disparity_range_; d++)
+        {
+          // Compute cost for: No disparity change
+          no_penalty_cost = path_cost_[cur_path][prev_y][prev_x][d];
+
+          // Compute cost for: Small disparity change (+/- 1)
+          unsigned long cost_minus_1 = (d > 0) ? path_cost_[cur_path][prev_y][prev_x][d - 1] + p1_ : 0xFFFFFFFF;
+          unsigned long cost_plus_1 = (d < (int)disparity_range_ - 1) ? path_cost_[cur_path][prev_y][prev_x][d + 1] + p1_ : 0xFFFFFFFF;
+          small_penalty_cost = std::min(cost_minus_1, cost_plus_1);
+
+          // Compute cost for: Large disparity change 
+          big_penalty_cost = best_prev_cost + p2_;
+
+          // Pick the minimum of the three possible previous states
+          prev_cost = std::min({no_penalty_cost, small_penalty_cost, big_penalty_cost});
+
+          // Calculate total path cost for current pixel at disparity d 
+          // Subtracting best_prev_cost is the standard SGM normalization to prevent overflow.
+          path_cost_[cur_path][cur_y][cur_x][d] = cost_[cur_y][cur_x][d] + prev_cost - best_prev_cost;
+        }
       }
     }
     /////////////////////////////////////////////////////////////////////////////////////////
@@ -255,7 +290,7 @@ namespace sgm
   void SGM::aggregation()
   {
     
-    //for all defined paths
+    // For all defined paths
     for(int cur_path = 0; cur_path < PATHS_PER_SCAN; ++cur_path)
     {
 
@@ -268,14 +303,32 @@ namespace sgm
       int dir_y = paths_[cur_path].direction_y;
       
       int start_x, start_y, end_x, end_y, step_x, step_y;
+
+      // Logic for X-axis traversal
+      if (dir_x == 1) {
+          start_x = pw_.west; end_x = pw_.east + 1; step_x = 1;
+      } else if (dir_x == -1) {
+          start_x = pw_.east; end_x = pw_.west - 1; step_x = -1;
+      } else { // dir_x == 0
+          start_x = pw_.west; end_x = pw_.east + 1; step_x = 1; 
+      }
+
+      // Logic for Y-axis traversal
+      if (dir_y == 1) {
+          start_y = pw_.north; end_y = pw_.south + 1; step_y = 1;
+      } else if (dir_y == -1) {
+          start_y = pw_.south; end_y = pw_.north - 1; step_y = -1;
+      } else { // dir_y == 0
+          start_y = pw_.north; end_y = pw_.south + 1; step_y = 1;
+      }
       
-//      for(int y = start_y; y != end_y ; y+=step_y)
-//      {
-//        for(int x = start_x; x != end_x ; x+=step_x)
-//        {
-//          compute_path_cost(dir_y, dir_x, y, x, cur_path);
-//        }
-//      }
+      for(int y = start_y; y != end_y ; y+=step_y)
+      {
+        for(int x = start_x; x != end_x ; x+=step_x)
+        {
+          compute_path_cost(dir_y, dir_x, y, x, cur_path);
+        }
+      }
       
       /////////////////////////////////////////////////////////////////////////////////////////
     }
