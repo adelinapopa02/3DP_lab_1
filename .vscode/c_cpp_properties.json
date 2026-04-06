@@ -1,0 +1,16 @@
+{
+    "configurations": [
+        {
+            "name": "Mac",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "/usr/local/Cellar/opencv/4.13.0_3/include/opencv4",    // For Mac
+                "/usr/local/Cellar/eigen/5.0.1/include/eigen3",         // For Mac 
+                "/usr/local/include/eigen3"                             // For Mac  
+            ],
+            "defines": [],
+            "cStandard": "c17"
+        }
+    ],
+    "version": 4
+}

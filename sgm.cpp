@@ -7,7 +7,7 @@
 
 #include "sgm.h"
 #include <opencv2/core.hpp>
-#include <Eigen/Dense>
+#include <eigen3/Eigen/Dense>
 #define NUM_DIRS 3
 #define PATHS_PER_SCAN 8
 
@@ -365,6 +365,9 @@ namespace sgm
 
   void SGM::compute_disparity()
   {
+      std::vector<double> sgm_samples;
+      std::vector<double> mono_samples;
+    
       calculate_cost_hamming();
       aggregation();
       disp_ = Mat(Size(width_, height_), CV_8UC1, Scalar::all(0));
@@ -397,12 +400,17 @@ namespace sgm
                 // to estimate the unknown scale factor.    
                 /////////////////////////////////////////////////////////////////////////////////////////
 
-                
-                
-                
-                
-                
-                
+                // Get the SGM disparity just calculated
+                double d_sgm = static_cast<double>(smallest_disparity);
+
+                // Get the corresponding monocular disparity from the right_mono_ image
+                // right_mono_ is a grayscale OpenCV Mat (uchar)
+                double d_mono = static_cast<double>(right_mono_.at<uchar>(row, col));
+
+                // Add them to the pool
+                sgm_samples.push_back(d_sgm);
+                mono_samples.push_back(d_mono);
+
                 /////////////////////////////////////////////////////////////////////////////////////////
               }
 

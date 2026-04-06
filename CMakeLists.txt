@@ -1,10 +1,13 @@
-cmake_minimum_required (VERSION 2.6)
+cmake_minimum_required (VERSION 3.5)
 
 project (sgm LANGUAGES C CXX)
 find_package(OpenCV REQUIRED )
 include_directories(${OpenCV_INCLUDE_DIRS})
 
 include_directories(.)
+
+set(CMAKE_CXX_STANDARD 17)              # For Mac
+set(CMAKE_CXX_STANDARD_REQUIRED ON)     # For Mac
 
 # Find Eigen
 find_package(Eigen3 REQUIRED)
