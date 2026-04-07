@@ -142,7 +142,7 @@ namespace sgm
     {
       for(int c = window_width_/2 + 1; c < width_ - window_width_/2 - 1; c++)
       {
-        for(int d=0; d<disparity_range_; d++)
+        for(int d = 0; d < disparity_range_; d++)
         {
           long cost = 0;
           for(int wr = r - window_height_/2; wr <= r + window_height_/2; wr++)
@@ -209,45 +209,37 @@ namespace sgm
       // if the processed pixel is the first or the last in the directional path:
       if( cur_y == pw_.north || cur_y == pw_.south || cur_x == pw_.east || cur_x == pw_.west)
       {
-        for (int d = 0; d < (int)disparity_range_; d++)
+        for (unsigned int d = 0; d < (int)disparity_range_; d++)
         {
-          // For the first pixel in a path, the path cost is simply the matching cost
           path_cost_[cur_path][cur_y][cur_x][d] = cost_[cur_y][cur_x][d];
         }
       }
-
       else
       {
-        // Identify the previous pixel coordinates based on the direction increments 
         int prev_x = cur_x - direction_x;
         int prev_y = cur_y - direction_y;
 
-        // Find the minimum path cost at the PREVIOUS pixel across all disparities
         best_prev_cost = path_cost_[cur_path][prev_y][prev_x][0];
-        for (int d = 1; d < (int)disparity_range_; d++)
+        for (unsigned int d = 1; d < (int)disparity_range_; d++)
         {
           if (path_cost_[cur_path][prev_y][prev_x][d] < best_prev_cost)
             best_prev_cost = path_cost_[cur_path][prev_y][prev_x][d];
         }
 
-        for (int d = 0; d < (int)disparity_range_; d++)
+        small_penalty_cost = p1_;
+        big_penalty_cost = best_prev_cost + p2_;
+
+        for (unsigned int d = 0; d < (int)disparity_range_; d++)
         {
-          // Compute cost for: No disparity change
           no_penalty_cost = path_cost_[cur_path][prev_y][prev_x][d];
 
-          // Compute cost for: Small disparity change (+/- 1)
-          unsigned long cost_minus_1 = (d > 0) ? path_cost_[cur_path][prev_y][prev_x][d - 1] + p1_ : 0xFFFFFFFF;
-          unsigned long cost_plus_1 = (d < (int)disparity_range_ - 1) ? path_cost_[cur_path][prev_y][prev_x][d + 1] + p1_ : 0xFFFFFFFF;
-          small_penalty_cost = std::min(cost_minus_1, cost_plus_1);
+          penalty_cost = std::min(
+            (d > 0) ? path_cost_[cur_path][prev_y][prev_x][d - 1] + small_penalty_cost : 0xFFFFFFFF,
+            (d < disparity_range_ - 1) ? path_cost_[cur_path][prev_y][prev_x][d + 1] + small_penalty_cost : 0xFFFFFFFF
+          );
 
-          // Compute cost for: Large disparity change 
-          big_penalty_cost = best_prev_cost + p2_;
+          prev_cost = std::min({no_penalty_cost, penalty_cost, big_penalty_cost});
 
-          // Pick the minimum of the three possible previous states
-          prev_cost = std::min({no_penalty_cost, small_penalty_cost, big_penalty_cost});
-
-          // Calculate total path cost for current pixel at disparity d 
-          // Subtracting best_prev_cost is the standard SGM normalization to prevent overflow.
           path_cost_[cur_path][cur_y][cur_x][d] = cost_[cur_y][cur_x][d] + prev_cost - best_prev_cost;
         }
       }
@@ -274,23 +266,54 @@ namespace sgm
       // if the processed pixel is the first or the last in the directional path:
       if( cur_y == pw_.north || cur_y == pw_.south || cur_x == pw_.east || cur_x == pw_.west)
       {
-        //Please fill me!
+        for (unsigned int d = 0; d < (int)disparity_range_; d++)
+        {
+          path_cost_[cur_path][cur_y][cur_x][d] = cost_[cur_y][cur_x][d];
+        }      
       }
 
       else
       {
-        //Please fill me!
+        int prev_x = cur_x - direction_x;
+        int prev_y = cur_y - direction_y;
+
+        float grad_val = right_grad_.at<float>(cur_y, cur_x);
+        
+        small_penalty_cost = static_cast<unsigned long>(p1_ * (1.0f - grad_val));
+        big_penalty_cost = static_cast<unsigned long>(p2_ * (1.0f - grad_val));
+
+        best_prev_cost = path_cost_[cur_path][prev_y][prev_x][0];
+        for (unsigned d = 1; d < (int)disparity_range_; d++)
+        {
+          if (path_cost_[cur_path][prev_y][prev_x][d] < best_prev_cost)
+            best_prev_cost = path_cost_[cur_path][prev_y][prev_x][d];
+        }
+
+        big_penalty_cost = best_prev_cost + big_penalty_cost;
+
+        for (unsigned int d = 0; d < (int)disparity_range_; d++)
+        {
+          no_penalty_cost = path_cost_[cur_path][prev_y][prev_x][d];
+
+          penalty_cost = std::min(
+            (d > 0) ? path_cost_[cur_path][prev_y][prev_x][d - 1] + small_penalty_cost : 0xFFFFFFFF,
+            (d < disparity_range_ - 1) ? path_cost_[cur_path][prev_y][prev_x][d + 1] + small_penalty_cost : 0xFFFFFFFF
+          );
+
+          prev_cost = std::min({no_penalty_cost, penalty_cost, big_penalty_cost});
+          path_cost_[cur_path][cur_y][cur_x][d] = cost_[cur_y][cur_x][d] + prev_cost - best_prev_cost;        
+        }
       }
     }
     /////////////////////////////////////////////////////////////////////////////////////////
-
+    
   }
 
   
   void SGM::aggregation()
   {
     
-    // For all defined paths
+    //for all defined paths
     for(int cur_path = 0; cur_path < PATHS_PER_SCAN; ++cur_path)
     {
 
@@ -304,32 +327,21 @@ namespace sgm
       
       int start_x, start_y, end_x, end_y, step_x, step_y;
 
-      // Logic for X-axis traversal
-      if (dir_x == 1) {
-          start_x = pw_.west; end_x = pw_.east + 1; step_x = 1;
-      } else if (dir_x == -1) {
-          start_x = pw_.east; end_x = pw_.west - 1; step_x = -1;
-      } else { // dir_x == 0
-          start_x = pw_.west; end_x = pw_.east + 1; step_x = 1; 
-      }
+      start_x = (dir_x == -1) ? pw_.east : pw_.west;
+      end_x   = (dir_x == -1) ? pw_.west - 1 : pw_.east + 1;
+      step_x  = (dir_x == -1) ? -1 : 1;
 
-      // Logic for Y-axis traversal
-      if (dir_y == 1) {
-          start_y = pw_.north; end_y = pw_.south + 1; step_y = 1;
-      } else if (dir_y == -1) {
-          start_y = pw_.south; end_y = pw_.north - 1; step_y = -1;
-      } else { // dir_y == 0
-          start_y = pw_.north; end_y = pw_.south + 1; step_y = 1;
-      }
+      start_y = (dir_y == -1) ? pw_.south : pw_.north;
+      end_y   = (dir_y == -1) ? pw_.north - 1 : pw_.south + 1;
+      step_y  = (dir_y == -1) ? -1 : 1;
       
-      for(int y = start_y; y != end_y ; y+=step_y)
+      for(int y = start_y; y != end_y ; y += step_y)
       {
-        for(int x = start_x; x != end_x ; x+=step_x)
+        for(int x = start_x; x != end_x ; x += step_x)
         {
           compute_path_cost(dir_y, dir_x, y, x, cur_path);
         }
       }
-      
       /////////////////////////////////////////////////////////////////////////////////////////
     }
     
@@ -344,7 +356,7 @@ namespace sgm
           unsigned long min_on_path = path_cost_[path][row][col][0];
           int disp =  0;
 
-          for(int d = 0; d<disparity_range_; d++)
+          for(unsigned int d = 0; d < disparity_range_; d++)
           {
             aggr_cost_[row][col][d] += path_cost_[path][row][col][d];
             if (path_cost_[path][row][col][d]<min_on_path)
@@ -400,16 +412,8 @@ namespace sgm
                 // to estimate the unknown scale factor.    
                 /////////////////////////////////////////////////////////////////////////////////////////
 
-                // Get the SGM disparity just calculated
-                double d_sgm = static_cast<double>(smallest_disparity);
-
-                // Get the corresponding monocular disparity from the right_mono_ image
-                // right_mono_ is a grayscale OpenCV Mat (uchar)
-                double d_mono = static_cast<double>(right_mono_.at<uchar>(row, col));
-
-                // Add them to the pool
-                sgm_samples.push_back(d_sgm);
-                mono_samples.push_back(d_mono);
+                sgm_samples.push_back(static_cast<double>(smallest_disparity));
+                mono_samples.push_back(static_cast<double>(right_mono_.at<uchar>(row, col)));
 
                 /////////////////////////////////////////////////////////////////////////////////////////
               }
@@ -427,45 +431,37 @@ namespace sgm
       /////////////////////////////////////////////////////////////////////////////////////////
       
       int n = sgm_samples.size();
-      if (n > 100) // Only proceed if we have enough data
+      if (n > 100)
       {
           Eigen::MatrixXd A(n, 2);
           Eigen::VectorXd b(n);
 
           for (int i = 0; i < n; i++) {
-              A(i, 0) = mono_samples[i]; // The "x" in the linear equation
-              A(i, 1) = 1.0;             // The constant for the offset k
-              b(i) = sgm_samples[i];     // The "y" (target) in the linear equation
+              A(i, 0) = mono_samples[i]; 
+              A(i, 1) = 1.0;             
+              b(i) = sgm_samples[i];     
           }
 
-          // Solve for x = [h k]^T using the Least Squares formula
           Eigen::Vector2d x = (A.transpose() * A).ldlt().solve(A.transpose() * b);
-          double h = x(0); // Scale
-          double k = x(1); // Offset
+          double h = x(0); 
+          double k = x(1); 
 
           std::cout << "Calculated Scale (h): " << h << " Offset (k): " << k << std::endl;
 
-          // Replace "bad" pixels with "scaled mono" pixels
           for (int r = 0; r < height_; r++) {
               for (int c = 0; c < width_; c++) {
-                  // If confidence is low (<= 0 or >= threshold)
                   if (inv_confidence_[r][c] <= 0 || inv_confidence_[r][c] >= conf_thresh_) {
-                      
-                      // Get the mono value and apply new h and k
+          
                       double m_val = static_cast<double>(right_mono_.at<uchar>(r, c));
-                      double refined_disp = h * m_val + k;
+                      double refined_disparity = h * m_val + k;
 
-                      // Clamp the value so it stays within 0 and disparity_range_
-                      refined_disp = std::max(0.0, std::min(static_cast<double>(disparity_range_), refined_disp));
+                      refined_disparity = std::max(0.0, std::min(static_cast<double>(disparity_range_), refined_disparity));
 
-                      // Update the final disparity map
-                      // Normalize back to 0-255 for the output image
-                      disp_.at<uchar>(r, c) = static_cast<uchar>(refined_disp * 255.0 / disparity_range_);
+                      disp_.at<uchar>(r, c) = static_cast<uchar>(refined_disparity * 255.0 / disparity_range_);
                   }
               }
           }
       }
-       
       /////////////////////////////////////////////////////////////////////////////////////////
 
   }
