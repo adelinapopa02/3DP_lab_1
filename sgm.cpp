@@ -279,8 +279,14 @@ namespace sgm
 
         float grad_val = right_grad_.at<float>(cur_y, cur_x);
         
-        small_penalty_cost = static_cast<unsigned long>(p1_ * (1.0f - grad_val));
-        big_penalty_cost = static_cast<unsigned long>(p2_ * (1.0f - grad_val));
+        float threshold = 0.5f;
+        if (grad_val < threshold) {
+            small_penalty_cost = p1_;
+            big_penalty_cost = p2_;
+        } else {
+            small_penalty_cost = 2UL; 
+            big_penalty_cost = 25UL; 
+        }
 
         best_prev_cost = path_cost_[cur_path][prev_y][prev_x][0];
         for (unsigned d = 1; d < (int)disparity_range_; d++)
