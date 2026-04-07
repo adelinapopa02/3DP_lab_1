@@ -211,14 +211,18 @@ namespace sgm
       {
         for (unsigned int d = 0; d < (int)disparity_range_; d++)
         {
+          // The path cost at the start is simply the initial matching cost (Hamming distance)
           path_cost_[cur_path][cur_y][cur_x][d] = cost_[cur_y][cur_x][d];
         }
       }
       else
       {
+        // Identify the coordinates of the previous pixel along the current 1D path
         int prev_x = cur_x - direction_x;
         int prev_y = cur_y - direction_y;
 
+        // Step 1: Find the minimum path cost among all disparities at the previous pixel.
+        // This 'best_prev_cost' is used later for the P2 penalty and for normalization.
         best_prev_cost = path_cost_[cur_path][prev_y][prev_x][0];
         for (unsigned int d = 1; d < (int)disparity_range_; d++)
         {
@@ -226,20 +230,29 @@ namespace sgm
             best_prev_cost = path_cost_[cur_path][prev_y][prev_x][d];
         }
 
+        // Pre-calculate penalty constants
         small_penalty_cost = p1_;
         big_penalty_cost = best_prev_cost + p2_;
 
+        // Step 2: Iterate through all possible disparities 'd' for the current pixel
         for (unsigned int d = 0; d < (int)disparity_range_; d++)
         {
+          // Case A: No change in disparity from the previous pixel
           no_penalty_cost = path_cost_[cur_path][prev_y][prev_x][d];
 
+          // Case B: Disparity shifts by exactly 1. 
+          // We check boundaries to avoid out-of-bounds access and use 0xFFFFFFFF for impossible shifts.
           penalty_cost = std::min(
             (d > 0) ? path_cost_[cur_path][prev_y][prev_x][d - 1] + small_penalty_cost : 0xFFFFFFFF,
             (d < disparity_range_ - 1) ? path_cost_[cur_path][prev_y][prev_x][d + 1] + small_penalty_cost : 0xFFFFFFFF
           );
 
+          // Step 3: Select the minimum of the three possible transitions (Stay, Shift 1, or Jump)
           prev_cost = std::min({no_penalty_cost, penalty_cost, big_penalty_cost});
 
+          // Step 4: Final Path Cost Calculation
+          // We add the local matching cost to the best transition cost.
+          // We subtract 'best_prev_cost' to normalize the values.
           path_cost_[cur_path][cur_y][cur_x][d] = cost_[cur_y][cur_x][d] + prev_cost - best_prev_cost;
         }
       }
@@ -277,18 +290,29 @@ namespace sgm
         int prev_x = cur_x - direction_x;
         int prev_y = cur_y - direction_y;
 
+        // Retrieve the normalized gradient magnitude (0.0 to 1.0)
         float grad_val = right_grad_.at<float>(cur_y, cur_x);
         
+        // HEURISTIC: The Switch (Truncated) Logic
+        // We only lower penalties if the gradient is strong enough to be a real depth edge.
         float threshold = 0.5f;
-        if (grad_val < threshold) {
-            small_penalty_cost = p1_;
-            big_penalty_cost = p2_;
-        } else {
-            small_penalty_cost = 2UL; 
-            big_penalty_cost = 25UL; 
+        if (grad_val < threshold) 
+        {
+          // If the gradient is low, we assume it's noise or texture (like text on a cone).
+          // We keep penalties high to enforce a smooth surface.
+          small_penalty_cost = p1_;
+          big_penalty_cost = p2_;
+        } 
+        else 
+        {
+          // If the gradient is high, we assume it's a physical object boundary.
+          // We make it "cheaper" to jump disparity so the map stays sharp at the edges.
+          small_penalty_cost = 2UL; 
+          big_penalty_cost = 25UL; 
         }
 
         best_prev_cost = path_cost_[cur_path][prev_y][prev_x][0];
+        
         for (unsigned d = 1; d < (int)disparity_range_; d++)
         {
           if (path_cost_[cur_path][prev_y][prev_x][d] < best_prev_cost)
@@ -328,19 +352,27 @@ namespace sgm
       // right values, after that uncomment the code below
       /////////////////////////////////////////////////////////////////////////////////////////
 
+      // Retrieve the unit direction (-1, 0, or 1) for the current path
       int dir_x = paths_[cur_path].direction_x;
       int dir_y = paths_[cur_path].direction_y;
       
       int start_x, start_y, end_x, end_y, step_x, step_y;
 
+      // X-Axis Traversal Logic
+      // If moving backward (dir_x == -1), start at the Right (East) and move Left.
+      // Otherwise (dir_x == 1 or 0), start at the Left (West) and move Right.
       start_x = (dir_x == -1) ? pw_.east : pw_.west;
       end_x   = (dir_x == -1) ? pw_.west - 1 : pw_.east + 1;
       step_x  = (dir_x == -1) ? -1 : 1;
 
+      // Y-Axis Traversal Logic
+      // If moving upward (dir_y == -1), start at the Bottom (South) and move Up.
+      // Otherwise (dir_y == 1 or 0), start at the Top (North) and move Down.
       start_y = (dir_y == -1) ? pw_.south : pw_.north;
       end_y   = (dir_y == -1) ? pw_.north - 1 : pw_.south + 1;
       step_y  = (dir_y == -1) ? -1 : 1;
       
+      // Perform the 2D scan across the Processing Window.
       for(int y = start_y; y != end_y ; y += step_y)
       {
         for(int x = start_x; x != end_x ; x += step_x)
@@ -418,8 +450,14 @@ namespace sgm
                 // to estimate the unknown scale factor.    
                 /////////////////////////////////////////////////////////////////////////////////////////
 
+                // Store the trusted SGM disparity.
                 sgm_samples.push_back(static_cast<double>(smallest_disparity));
+                
+                // Store the corresponding unscaled disparity value from the monocular guess.
                 mono_samples.push_back(static_cast<double>(right_mono_.at<uchar>(row, col)));
+
+                // These pairs (mono, sgm) represent the (x, y) points in our linear regression 
+                // model: SGM = h * Mono + k.
 
                 /////////////////////////////////////////////////////////////////////////////////////////
               }
@@ -437,32 +475,43 @@ namespace sgm
       /////////////////////////////////////////////////////////////////////////////////////////
       
       int n = sgm_samples.size();
-      if (n > 100)
+      if (n > 100) // Ensure we have enough samples
       {
+        // Initialize Eigen matrices for the Normal Equation: A * x = b
+        // A contains the Monocular values and a column of 1s (for the offset k)
+        // b contains the trusted SGM values
           Eigen::MatrixXd A(n, 2);
           Eigen::VectorXd b(n);
 
           for (int i = 0; i < n; i++) {
-              A(i, 0) = mono_samples[i]; 
-              A(i, 1) = 1.0;             
-              b(i) = sgm_samples[i];     
+              A(i, 0) = mono_samples[i];  // Input feature
+              A(i, 1) = 1.0;              // Multiplier for offset 'k'
+              b(i) = sgm_samples[i];      // Target value
           }
 
+          // Solve the overdetermined system using LDLT decomposition (Least Squares)
+          // Result x contains [h, k]^T
           Eigen::Vector2d x = (A.transpose() * A).ldlt().solve(A.transpose() * b);
           double h = x(0); 
           double k = x(1); 
 
           std::cout << "Calculated Scale (h): " << h << " Offset (k): " << k << std::endl;
 
+          // Refinement Pass: Use our new math to fix the "bad" pixels
           for (int r = 0; r < height_; r++) {
               for (int c = 0; c < width_; c++) {
+                // Only update pixels that were rejected by SGM (Low Confidence)
                   if (inv_confidence_[r][c] <= 0 || inv_confidence_[r][c] >= conf_thresh_) {
           
                       double m_val = static_cast<double>(right_mono_.at<uchar>(r, c));
+                      
+                      // Apply the calibrated linear model
                       double refined_disparity = h * m_val + k;
 
+                      // Ensure the new value is within valid physical bounds [0, max_disparity]
                       refined_disparity = std::max(0.0, std::min(static_cast<double>(disparity_range_), refined_disparity));
 
+                      // Normalize to 0-255 for the final output image display
                       disp_.at<uchar>(r, c) = static_cast<uchar>(refined_disparity * 255.0 / disparity_range_);
                   }
               }
