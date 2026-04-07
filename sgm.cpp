@@ -425,14 +425,47 @@ namespace sgm
       // accordingly. Finally,  and use them to improve/replace the low-confidence SGM 
       // disparities.
       /////////////////////////////////////////////////////////////////////////////////////////
+      
+      int n = sgm_samples.size();
+      if (n > 100) // Only proceed if we have enough data
+      {
+          Eigen::MatrixXd A(n, 2);
+          Eigen::VectorXd b(n);
 
-      
-      
-      
-      
-      
-      
-      
+          for (int i = 0; i < n; i++) {
+              A(i, 0) = mono_samples[i]; // The "x" in the linear equation
+              A(i, 1) = 1.0;             // The constant for the offset k
+              b(i) = sgm_samples[i];     // The "y" (target) in the linear equation
+          }
+
+          // Solve for x = [h k]^T using the Least Squares formula
+          Eigen::Vector2d x = (A.transpose() * A).ldlt().solve(A.transpose() * b);
+          double h = x(0); // Scale
+          double k = x(1); // Offset
+
+          std::cout << "Calculated Scale (h): " << h << " Offset (k): " << k << std::endl;
+
+          // Replace "bad" pixels with "scaled mono" pixels
+          for (int r = 0; r < height_; r++) {
+              for (int c = 0; c < width_; c++) {
+                  // If confidence is low (<= 0 or >= threshold)
+                  if (inv_confidence_[r][c] <= 0 || inv_confidence_[r][c] >= conf_thresh_) {
+                      
+                      // Get the mono value and apply new h and k
+                      double m_val = static_cast<double>(right_mono_.at<uchar>(r, c));
+                      double refined_disp = h * m_val + k;
+
+                      // Clamp the value so it stays within 0 and disparity_range_
+                      refined_disp = std::max(0.0, std::min(static_cast<double>(disparity_range_), refined_disp));
+
+                      // Update the final disparity map
+                      // Normalize back to 0-255 for the output image
+                      disp_.at<uchar>(r, c) = static_cast<uchar>(refined_disp * 255.0 / disparity_range_);
+                  }
+              }
+          }
+      }
+       
       /////////////////////////////////////////////////////////////////////////////////////////
 
   }

@@ -1,0 +1,3 @@
+/home/adelina/Desktop/3D_Data/3DP_lab_1/build/CMakeFiles/sgm.dir
+/home/adelina/Desktop/3D_Data/3DP_lab_1/build/CMakeFiles/edit_cache.dir
+/home/adelina/Desktop/3D_Data/3DP_lab_1/build/CMakeFiles/rebuild_cache.dir
