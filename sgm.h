@@ -60,6 +60,7 @@ namespace sgm
       unsigned int conf_thresh_;
       unsigned int window_height_;
       unsigned window_width_;
+      float mean_grad_val_;
       cv::Mat disp_;
       cv::Mat right_mono_, left_mono_;
       cv::Mat views_[2];

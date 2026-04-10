@@ -62,6 +62,7 @@ namespace sgm
     cv::magnitude(grad_x, grad_y, right_grad_);
     cv::normalize(right_grad_, right_grad_, 0, 1.0, cv::NORM_MINMAX);
 
+    mean_grad_val_ = (float)cv::mean(right_grad_)[0];
 
     height_ = left_img.rows;
     width_ = right_img.cols;
@@ -295,8 +296,9 @@ namespace sgm
         
         // HEURISTIC: The Switch (Truncated) Logic
         // We only lower penalties if the gradient is strong enough to be a real depth edge.
-        float threshold = 0.5f;
-        if (grad_val < threshold) 
+        float dynamic_threshold = mean_grad_val_ * 1.5f;        
+        
+        if (grad_val < dynamic_threshold) 
         {
           // If the gradient is low, we assume it's noise or texture (like text on a cone).
           // We keep penalties high to enforce a smooth surface.
@@ -307,8 +309,8 @@ namespace sgm
         {
           // If the gradient is high, we assume it's a physical object boundary.
           // We make it "cheaper" to jump disparity so the map stays sharp at the edges.
-          small_penalty_cost = 2UL; 
-          big_penalty_cost = 25UL; 
+          small_penalty_cost = 1UL; 
+          big_penalty_cost = 20UL; 
         }
 
         best_prev_cost = path_cost_[cur_path][prev_y][prev_x][0];
