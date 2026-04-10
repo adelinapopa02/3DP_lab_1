@@ -296,14 +296,14 @@ namespace sgm
         
         // HEURISTIC: The Switch (Truncated) Logic
         // We only lower penalties if the gradient is strong enough to be a real depth edge.
-        float dynamic_threshold = mean_grad_val_ * 1.5f;        
+        float dynamic_threshold = mean_grad_val_ * 2.0f;        
         
         if (grad_val < dynamic_threshold) 
         {
           // If the gradient is low, we assume it's noise or texture (like text on a cone).
           // We keep penalties high to enforce a smooth surface.
-          small_penalty_cost = p1_;
-          big_penalty_cost = p2_;
+          small_penalty_cost = 10UL;
+          big_penalty_cost = 60UL;
         } 
         else 
         {
