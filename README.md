@@ -24,7 +24,7 @@ The pipeline:
 | `sgm.h` / `sgm.cpp` | Core SGM-Census implementation: cost computation, cost aggregation, disparity selection. |
 | `main.cpp` | CLI entry point: loads a data folder, runs SGM, writes the output disparity image. |
 | `Examples/` | Test stereo pairs (`Aloe`, `Cones`, `Plastic`, `Rocks1`) with left/right images, monocular cues and ground-truth disparity. |
-| `Stereo Matching SGM + Monocular.pdf` | Assignment write-up / report. |
+| `Lab1_Report_2160137.pdf` | Report: approach, parameter choices and results on the provided stereo pairs. |
 
 ---
 
@@ -50,3 +50,9 @@ make
 ```
 
 Runs SGM-Census on the `Rocks1` stereo pair with a disparity search range of 85 pixels and writes the resulting disparity map to `out.png`.
+
+---
+
+## Report
+
+See [`Lab1_Report_2160137.pdf`](./Lab1_Report_2160137.pdf) for the write-up: method description, parameter tuning and results on the `Aloe`, `Cones`, `Plastic` and `Rocks1` test pairs.
